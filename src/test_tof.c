@@ -11,14 +11,31 @@
 #include "crtp.h"
 #include "vl53l5cx_api.h"
 #include "I2C_expander.h"
-
+#include "log.h"
+#include "kalman_core.h"
+#include "arm_math.h"
+#include "estimator.h"
+#include "AAParamsYannick.h"
+#include "stabilizer_types.h"
 
 #define DEBUG_MODULE "TOFMATRIX"
-#define NR_OF_SENSORS 4
-#define NR_OF_PIXELS 64
+// #define NR_OF_SENSORS 4
+// #define NR_OF_PIXELS 16
+
 
 static VL53L5CX_Configuration tof_dev[NR_OF_SENSORS];
-static VL53L5CX_ResultsData tof_data;
+static VL53L5CX_ResultsData tof_data0;
+static VL53L5CX_ResultsData tof_data1;
+static VL53L5CX_ResultsData tof_data2;
+static VL53L5CX_ResultsData tof_data3;
+// static int32_t logTof0;
+// static int32_t logTof65;
+static int32_t logTof0;
+static int32_t logTof1;
+static int32_t logTof2;
+static int32_t logTof3;
+
+
 
 void send_command(uint8_t command, uint8_t arg);
 void send_data_packet(uint8_t *data, uint16_t data_len);
@@ -47,7 +64,7 @@ void appMain() {
       // Configure the current sensor
       uint8_t status = config_sensors(&tof_dev[i], tof_i2c_addresses[i]);
       DEBUG_PRINT("Sensor %d conf. status: %d  (0 means ok) \n", i, status);
-
+      
       // Start ranging
       status = vl53l5cx_start_ranging(&tof_dev[i]);
       DEBUG_PRINT("Sensor %d ranging status: %d  (0 means ok) \n", i, status);
@@ -62,28 +79,90 @@ void appMain() {
 
    uint8_t ranging_ready = 255;
    uint8_t get_data_success = 255;
-   uint8_t to_send_buffer[4*NR_OF_PIXELS];
- 
+   //uint8_t to_send_buffer[4*NR_OF_PIXELS];
+   
    while(1) {
+      
       vTaskDelay(M2T(70));
       vl53l5cx_check_data_ready(&tof_dev[0], &ranging_ready);  // poll for data-ready
+      MultitofMeasurement_t MultitofData;
 
       if (ranging_ready == 1) {
-         get_data_success = vl53l5cx_get_ranging_data(&tof_dev[0], &tof_data);
-         if (get_data_success == VL53L5CX_STATUS_OK) {
-            // for(uint8_t i=0; i<NR_OF_PIXELS; i++)
-               // DEBUG_PRINT(" %ld \n", (int32_t)tof_data.distance_mm[i]);
-            memcpy(&to_send_buffer[0], (uint8_t *)(&tof_data.distance_mm[0]), 2*NR_OF_PIXELS);
-            memcpy(&to_send_buffer[2*NR_OF_PIXELS], (uint8_t *)(&tof_data.nb_target_detected[0]), NR_OF_PIXELS);
-            memcpy(&to_send_buffer[3*NR_OF_PIXELS], (uint8_t *)(&tof_data.target_status[0]), NR_OF_PIXELS);
+         get_data_success = vl53l5cx_get_ranging_data(&tof_dev[0], &tof_data0);
+         memcpy(&MultitofData.distances, tof_data0.distance_mm, sizeof(uint16_t) * NR_OF_PIXELS);
+         // if (get_data_success == VL53L5CX_STATUS_OK) { 
+         //     for(uint8_t i=0; i<NR_OF_PIXELS; i++) {
+         //        logTof0 = (int32_t)tof_data0.distance_mm[i]; 
+         //    //     //DEBUG_PRINT("%d: %ld \n", i,  (int32_t)tof_data.distance_mm[i]);
+               
+         //     }
+         //    //memcpy(&to_send_buffer[0], (uint8_t *)(&tof_data.distance_mm[0]), 2*NR_OF_PIXELS);
+         //    //memcpy(&to_send_buffer[2*NR_OF_PIXELS], (uint8_t *)(&tof_data.nb_target_detected[0]), NR_OF_PIXELS);
+         //    //memcpy(&to_send_buffer[3*NR_OF_PIXELS], (uint8_t *)(&tof_data.target_status[0]), NR_OF_PIXELS);
 
-            send_command(1, (4*NR_OF_PIXELS)/28 + 1);
-            send_data_packet(&to_send_buffer[0], 4*NR_OF_PIXELS);
-         }
+         //    // send_command(1, (4*NR_OF_PIXELS)/28 + 1);
+         //    // send_data_packet(&to_send_buffer[0], 4*NR_OF_PIXELS);
+            
+            
+         // }
       }
-      ranging_ready = 2;
+      // ranging_ready = 2;
+      // if(NR_OF_SENSORS >= 2) {
+      //    vTaskDelay(M2T(70));
+      //    vl53l5cx_check_data_ready(&tof_dev[1], &ranging_ready);  // poll for data-ready
+
+      //    if (ranging_ready == 1) {
+      //       get_data_success = vl53l5cx_get_ranging_data(&tof_dev[1], &tof_data1);
+      // memcpy(&MultitofData.distances + NR_OF_PIXELS, tof_data0.distance_mm, sizeof(uint16_t) * NR_OF_PIXELS);
+            
+      //    }
+      //    ranging_ready = 2;
+      // }
+
+      // if(NR_OF_SENSORS >= 3) {
+      // vTaskDelay(M2T(70));
+      // vl53l5cx_check_data_ready(&tof_dev[2], &ranging_ready);  // poll for data-ready
+
+      // if (ranging_ready == 1) {
+      //    get_data_success = vl53l5cx_get_ranging_data(&tof_dev[2], &tof_data2);
+      // memcpy(&MultitofData.distances + 2 * NR_OF_PIXELS, tof_data0.distance_mm, sizeof(uint16_t) * NR_OF_PIXELS);
+         
+      // }
+      // ranging_ready = 2;
+      // }
+
+      // if(NR_OF_SENSORS >= 4) {
+      // vTaskDelay(M2T(70));
+      // vl53l5cx_check_data_ready(&tof_dev[3], &ranging_ready);  // poll for data-ready
+
+      // if (ranging_ready == 1) {
+      //    get_data_success = vl53l5cx_get_ranging_data(&tof_dev[3], &tof_data3);
+      // memcpy(&MultitofData.distances + 3 * NR_OF_PIXELS, tof_data0.distance_mm, sizeof(uint16_t) * NR_OF_PIXELS);
+        
+      // }
+      // ranging_ready = 2;
+
+      // }
+     
+      
+      
+      
+      MultitofData.stdDev = 0;
+      uint64_t time = usecTimestamp();
+      MultitofData.timestamp = time;
+      estimatorEnqueueMultiTOF(&MultitofData);
+      
    }
+
+// void  kalmanCoreUpdateWithTof(kalmanCoreData_t* this, tofMeasurement_t *tof){
+
+//     kalmanCoreScalarUpdate(this, &H, measuredDistance-predictedDistance, tof->stdDev);
+  
+// }
+   
 }
+
+// kalmanCoreScalarUpdate(1, 2, 0.0f, 0.0f);
 
 
 void send_data_packet(uint8_t *data, uint16_t data_len) {
@@ -140,3 +219,16 @@ uint8_t config_sensors(VL53L5CX_Configuration *p_dev, uint16_t new_i2c_address) 
 
    return status;
 }
+
+LOG_GROUP_START(Quadtof1)
+
+LOG_ADD(LOG_INT32, SensorTofDeck0, &logTof0)
+LOG_ADD(LOG_INT32, SensorTofDeck1, &logTof1)
+LOG_ADD(LOG_INT32, SensorTofDeck2, &logTof2)
+LOG_ADD(LOG_INT32, SensorTofDeck3, &logTof3)
+LOG_GROUP_STOP(Quadtof1)
+// LOG_ADD(LOG_INT32, SensorTofDeck0, &logTof0)
+// LOG_ADD(LOG_INT32, SensorTofDeck65, &logTof65)
+
+
+//CLOAD_CMDS='-w radio://0/60/2M/E7E7E7E7E7' make cload

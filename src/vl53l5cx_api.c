@@ -101,7 +101,7 @@ static uint8_t _vl53l5cx_poll_for_answer(
 			timeout++;
 		}
 	}while ((p_dev->temp_buffer[pos] & mask) != expected_value);
-
+	
 	return status;
 }
 
