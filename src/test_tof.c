@@ -19,8 +19,7 @@
 #include "stabilizer_types.h"
 
 #define DEBUG_MODULE "TOFMATRIX"
-// #define NR_OF_SENSORS 4
-// #define NR_OF_PIXELS 16
+
 
 
 static VL53L5CX_Configuration tof_dev[NR_OF_SENSORS];
@@ -30,10 +29,10 @@ static VL53L5CX_ResultsData tof_data2;
 static VL53L5CX_ResultsData tof_data3;
 // static int32_t logTof0;
 // static int32_t logTof65;
-static int32_t logTof0;
-static int32_t logTof1;
-static int32_t logTof2;
-static int32_t logTof3;
+// static int32_t logTof0;
+// static int32_t logTof1;
+// static int32_t logTof2;
+// static int32_t logTof3;
 
 
 
@@ -45,6 +44,7 @@ uint8_t config_sensors(VL53L5CX_Configuration *p_dev, uint16_t new_i2c_address);
 
 #define TOF_I2C_ADDR 0x56
 uint8_t tof_i2c_addresses[NR_OF_SENSORS];
+uint16_t distancesprev[NR_OF_PIXELS * NR_OF_SENSORS];
 
 void appMain() {
    DEBUG_PRINT("Size of configuration %d \n", sizeof(VL53L5CX_Configuration));
@@ -143,11 +143,15 @@ void appMain() {
       // ranging_ready = 2;
 
       // }
-     
-      
-      
-      
-      MultitofData.stdDev = 0;
+   uint16_t sum = 0;
+   for(uint8_t j = 0; j<NR_OF_PIXELS; j++){
+      sum += tof_data0.range_sigma_mm[j];
+   }
+   uint16_t averageDelta = sum / NR_OF_PIXELS; 
+         
+      memcpy(&MultitofData.distancesprev, &distancesprev, sizeof(uint16_t) * NR_OF_PIXELS * NR_OF_SENSORS);
+      memcpy(&distancesprev, &MultitofData.distances, sizeof(uint16_t) * NR_OF_PIXELS * NR_OF_SENSORS);
+      MultitofData.stdDev = averageDelta;
       uint64_t time = usecTimestamp();
       MultitofData.timestamp = time;
       estimatorEnqueueMultiTOF(&MultitofData);
@@ -162,7 +166,6 @@ void appMain() {
    
 }
 
-// kalmanCoreScalarUpdate(1, 2, 0.0f, 0.0f);
 
 
 void send_data_packet(uint8_t *data, uint16_t data_len) {
@@ -220,13 +223,13 @@ uint8_t config_sensors(VL53L5CX_Configuration *p_dev, uint16_t new_i2c_address) 
    return status;
 }
 
-LOG_GROUP_START(Quadtof1)
+// LOG_GROUP_START(Quadtof1)
 
-LOG_ADD(LOG_INT32, SensorTofDeck0, &logTof0)
-LOG_ADD(LOG_INT32, SensorTofDeck1, &logTof1)
-LOG_ADD(LOG_INT32, SensorTofDeck2, &logTof2)
-LOG_ADD(LOG_INT32, SensorTofDeck3, &logTof3)
-LOG_GROUP_STOP(Quadtof1)
+// LOG_ADD(LOG_INT32, SensorTofDeck0, &logTof0)
+// LOG_ADD(LOG_INT32, SensorTofDeck1, &logTof1)
+// LOG_ADD(LOG_INT32, SensorTofDeck2, &logTof2)
+// LOG_ADD(LOG_INT32, SensorTofDeck3, &logTof3)
+// LOG_GROUP_STOP(Quadtof1)
 // LOG_ADD(LOG_INT32, SensorTofDeck0, &logTof0)
 // LOG_ADD(LOG_INT32, SensorTofDeck65, &logTof65)
 
