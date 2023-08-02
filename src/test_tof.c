@@ -45,7 +45,7 @@ uint8_t config_sensors(VL53L5CX_Configuration *p_dev, uint16_t new_i2c_address);
 #define TOF_I2C_ADDR 0x56
 uint8_t tof_i2c_addresses[NR_OF_SENSORS];
 uint16_t distancesprev[NR_OF_PIXELS * NR_OF_SENSORS];
-
+uint64_t timestampprev = 0;
 void appMain() {
    DEBUG_PRINT("Size of configuration %d \n", sizeof(VL53L5CX_Configuration));
 
@@ -151,9 +151,12 @@ void appMain() {
          
       memcpy(&MultitofData.distancesprev, &distancesprev, sizeof(uint16_t) * NR_OF_PIXELS * NR_OF_SENSORS);
       memcpy(&distancesprev, &MultitofData.distances, sizeof(uint16_t) * NR_OF_PIXELS * NR_OF_SENSORS);
+      
       MultitofData.stdDev = averageDelta;
       uint64_t time = usecTimestamp();
       MultitofData.timestamp = time;
+      MultitofData.timestampprev = timestampprev;
+      timestampprev = time; 
       estimatorEnqueueMultiTOF(&MultitofData);
       
    }
