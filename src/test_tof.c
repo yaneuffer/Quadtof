@@ -44,8 +44,6 @@ uint8_t config_sensors(VL53L5CX_Configuration *p_dev, uint16_t new_i2c_address);
 
 #define TOF_I2C_ADDR 0x56
 uint8_t tof_i2c_addresses[NR_OF_SENSORS];
-uint16_t distancesprev[NR_OF_PIXELS * NR_OF_SENSORS];
-uint64_t timestampprev = 0;
 void appMain() {
    DEBUG_PRINT("Size of configuration %d \n", sizeof(VL53L5CX_Configuration));
 
@@ -80,7 +78,6 @@ void appMain() {
    uint8_t ranging_ready = 255;
    uint8_t get_data_success = 255;
    //uint8_t to_send_buffer[4*NR_OF_PIXELS];
-   
    while(1) {
       
       vTaskDelay(M2T(70));
@@ -89,13 +86,16 @@ void appMain() {
 
       if (ranging_ready == 1) {
          get_data_success = vl53l5cx_get_ranging_data(&tof_dev[0], &tof_data0);
-         memcpy(&MultitofData.distances, tof_data0.distance_mm, sizeof(uint16_t) * NR_OF_PIXELS);
-         // if (get_data_success == VL53L5CX_STATUS_OK) { 
-         //     for(uint8_t i=0; i<NR_OF_PIXELS; i++) {
-         //        logTof0 = (int32_t)tof_data0.distance_mm[i]; 
-         //    //     //DEBUG_PRINT("%d: %ld \n", i,  (int32_t)tof_data.distance_mm[i]);
-               
-         //     }
+         memcpy(&MultitofData.distancesF, tof_data0.distance_mm, sizeof(uint16_t) * NR_OF_PIXELS);
+         //  if (get_data_success == VL53L5CX_STATUS_OK) { 
+         //      for(uint8_t i=0; i<8; i++) {
+         //          for(uint8_t j=0; j<8; j++) {
+         // //        logTof0 = (int32_t)tof_data0.distance_mm[i]; 
+         //          DEBUG_PRINT("%ld  ",(int32_t)tof_data0.distance_mm[8*i + j]);
+         //          }
+         //          DEBUG_PRINT("\n");
+         //      }
+         //      DEBUG_PRINT("\n*\n");
          //    //memcpy(&to_send_buffer[0], (uint8_t *)(&tof_data.distance_mm[0]), 2*NR_OF_PIXELS);
          //    //memcpy(&to_send_buffer[2*NR_OF_PIXELS], (uint8_t *)(&tof_data.nb_target_detected[0]), NR_OF_PIXELS);
          //    //memcpy(&to_send_buffer[3*NR_OF_PIXELS], (uint8_t *)(&tof_data.target_status[0]), NR_OF_PIXELS);
@@ -103,8 +103,8 @@ void appMain() {
          //    // send_command(1, (4*NR_OF_PIXELS)/28 + 1);
          //    // send_data_packet(&to_send_buffer[0], 4*NR_OF_PIXELS);
             
-            
-         // }
+         //  }
+          
       }
       // ranging_ready = 2;
       // if(NR_OF_SENSORS >= 2) {
@@ -120,15 +120,15 @@ void appMain() {
       // }
 
       // if(NR_OF_SENSORS >= 3) {
-      // vTaskDelay(M2T(70));
-      // vl53l5cx_check_data_ready(&tof_dev[2], &ranging_ready);  // poll for data-ready
+      vTaskDelay(M2T(70));
+      vl53l5cx_check_data_ready(&tof_dev[3], &ranging_ready);  // poll for data-ready
 
-      // if (ranging_ready == 1) {
-      //    get_data_success = vl53l5cx_get_ranging_data(&tof_dev[2], &tof_data2);
-      // memcpy(&MultitofData.distances + 2 * NR_OF_PIXELS, tof_data0.distance_mm, sizeof(uint16_t) * NR_OF_PIXELS);
+      if (ranging_ready == 1) {
+         get_data_success = vl53l5cx_get_ranging_data(&tof_dev[3], &tof_data3);
+      memcpy(&MultitofData.distancesR, tof_data3.distance_mm, sizeof(uint16_t) * NR_OF_PIXELS);
          
-      // }
-      // ranging_ready = 2;
+      }
+      ranging_ready = 2;
       // }
 
       // if(NR_OF_SENSORS >= 4) {
@@ -143,30 +143,41 @@ void appMain() {
       // ranging_ready = 2;
 
       // }
-   uint16_t sum = 0;
-   for(uint8_t j = 0; j<NR_OF_PIXELS; j++){
-      sum += tof_data0.range_sigma_mm[j];
-   }
-   uint16_t averageDelta = sum / NR_OF_PIXELS; 
-         
-      memcpy(&MultitofData.distancesprev, &distancesprev, sizeof(uint16_t) * NR_OF_PIXELS * NR_OF_SENSORS);
-      memcpy(&distancesprev, &MultitofData.distances, sizeof(uint16_t) * NR_OF_PIXELS * NR_OF_SENSORS);
+   uint16_t sumF = 0;
+   for(uint8_t i = 0; i<8; i++){
+      for(uint8_t j = 3; j<5; j++){
       
-      MultitofData.stdDev = averageDelta;
-      uint64_t time = usecTimestamp();
+      sumF += tof_data0.range_sigma_mm[(8*i + j)];
+   }
+   }
+   float averageDeltaF = sumF / 16; 
+   
+   uint16_t sumR = 0;
+   for(uint8_t i = 0; i<8; i++){
+      for(uint8_t j = 3; j<5; j++){
+      
+      sumR += tof_data3.range_sigma_mm[(8*i + j)];
+   }
+   }
+   float averageDeltaR = sumR / 16; 
+         
+      //memcpy(&MultitofData.distancesprev, &distancesprev, sizeof(uint16_t) * NR_OF_PIXELS * NR_OF_SENSORS);
+      // memcpy(&distancesprev, &MultitofData.distances, sizeof(uint16_t) * NR_OF_PIXELS * NR_OF_SENSORS);
+      
+      MultitofData.stdDevF = averageDeltaF;
+      MultitofData.stdDevR = averageDeltaR;
+      uint64_t time = (float) usecTimestamp();
+
       MultitofData.timestamp = time;
-      MultitofData.timestampprev = timestampprev;
-      timestampprev = time; 
+   
+      //DEBUG_PRINT("%d\n", MultitofData.timestampprev);
+    
       estimatorEnqueueMultiTOF(&MultitofData);
       
+      
+      
    }
 
-// void  kalmanCoreUpdateWithTof(kalmanCoreData_t* this, tofMeasurement_t *tof){
-
-//     kalmanCoreScalarUpdate(this, &H, measuredDistance-predictedDistance, tof->stdDev);
-  
-// }
-   
 }
 
 
